@@ -1,6 +1,6 @@
-from bintrees import AVLTree as AVL
 import collections
 from typing import List, Tuple
+from abc import ABC
 
 Point = Tuple[float, ...]
 
@@ -46,12 +46,95 @@ def traverse(node):
     if node.right:
         yield from traverse(node.right)
 
+class LeafTree(ABC):
+    @property
+    @abstractmethod
+    def is_internal(self):
+        pass
+
+    @property
+    @abstractmethod
+    def size(self):
+        pass
+
+    @property
+    @abstractmethod
+    def key(self):
+        pass
+
+    @property
+    @abstractmethod
+    def min(self):
+        pass
+
+    @property
+    @abstractmethod
+    def max(self):
+        pass
+
+    @property
+    @abstractmethod
+    def data(self):
+        pass
+
+    @classmethod
+    def create(cls, points):
+        # make sure points are sorted by the x coordinate
+
+        if len(points) == 1: 
+            return LeafTreeLeaf(points[0])
+            
+        elif len(points) == 2:
+            left_leaf = LeafTreeLeaf(points[0])
+            right_leaf = LeafTreeLeaf(points[1])
+            return LeafTreeBranch(left_leaf, right_leaf)
+
+        left = construct_1D_tree(points[:len(points)//2])
+        right = construct_1D_tree(points[len(points)//2:])
+        
+        return LeafTreeBranch(left, right)
+
+            
+    def range_query(self, start, end):
+        # First phase, traverse until PRED(start)/SUCC(end) diverge
+        if self.key < start:
+            
+
+
+class LeafTreeBranch(LeafTree):
+    def __init__(self, left, right, data=None):
+        self.size = left.size + right.size
+        self.key = left.max
+        self.min = left.min
+        self.max = right.max
+        self.left = left
+        self.right = right
+        self.is_internal = True
+        self.data = data
+
+    def __repr__(self):
+        return f"Branch({self.left}, {self.right})"
+
+class LeafTreeLeaf(LeafTree):
+    is_internal = False
+    
+    def __init__(self, key, data=None):
+        self.size = 1
+        self.key = key
+        self.min = key
+        self.max = key
+        self.data = data
+
+    def __repr__(self):
+        return f"Leaf({self.key})"
+
+"""
 class StaticVanillaRangeTree:
     def __init__(self, points: List[Point]):
         
         assert len(points) > 0
-
-        self.tree = self.construct_tree(points)
+        tree_1D = LeafTree(points)
+        for 
         
     def print_tree(self, root):
         for node in traverse(root):
@@ -65,12 +148,7 @@ class StaticVanillaRangeTree:
         dim = len(points[0])
         
         if dim == 1:
-            tree = AVL()
-            for point in points:
-                x, rest = point[0], point[1:]
-                tree.insert(x, {'coord': point})
-            augment_nodes(tree._root)
-            return tree
+            pass
         else:
             tree = AVL()
             for point in points:
@@ -86,3 +164,4 @@ class StaticVanillaRangeTree:
                 node.value['sub_range_tree'] = recursive_range_tree
                 self.print_tree(recursive_range_tree.tree._root)
             return tree
+"""
