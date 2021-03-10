@@ -1,167 +1,160 @@
-import collections
-from typing import List, Tuple
-from abc import ABC
+from __future__ import annotations
 
-Point = Tuple[float, ...]
+from dataclasses import dataclass, InitVar, field
+from typing import Optional, Generic, TypeVar, Any, List, Tuple, Sequence, Iterator
 
-def augment_nodes(node):
-    dict_key = 'subtree_size'
-    subtree_nodes = 'subtree_nodes'
-    coord = 'coord'
-    
-    if node is None:
-        return False
-    
-    if not node.left and not node.right:
-        node.value[dict_key] = 1
-        node.value[subtree_nodes] = [node.value[coord]]
-        return
-    
-    augment_nodes(node.left)
-    augment_nodes(node.right)
-    
-    if node.left:
-        left_subtree = node.left.value[dict_key]
-        left_nodes = node.left.value[subtree_nodes]
-    else:
-        left_subtree = 0
-        left_nodes = []
-    if node.right:
-        right_subtree = node.right.value[dict_key]
-        right_nodes = node.right.value[subtree_nodes]
-    else:
-        right_subtree = 0
-        right_nodes = []
-    
-    node.value[dict_key] = left_subtree + right_subtree + 1
-    node.value[subtree_nodes] = left_nodes + [node.value[coord]] + right_nodes
-    return node
+K = TypeVar("K")
+V = TypeVar("V")
 
-def traverse(node):
-    if not node:
-        yield None
-    if node.left:
-        yield from traverse(node.left)
-    yield node
-    if node.right:
-        yield from traverse(node.right)
 
-class LeafTree(ABC):
-    @property
-    @abstractmethod
-    def is_internal(self):
-        pass
+@dataclass(frozen=True)
+class TreeNode(Generic[K, V]):
+    is_leaf: bool = True
+    size: int = 1
+    _key: InitVar[Optional[K]] = None
+    left: Optional[TreeNode] = None
+    right: Optional[TreeNode] = None
+    value: Optional[V] = None
+    key: K = field(init=False)
+    min: K = field(init=False)
+    max: K = field(init=False)
 
-    @property
-    @abstractmethod
-    def size(self):
-        pass
+    def __post_init__(self, _key: Optional[K]):
+        if _key is not None:
+            object.__setattr__(self, 'key', _key)
+            object.__setattr__(self, 'min', self.key)
+            object.__setattr__(self, 'max', self.key)
+        else:
+            assert not self.is_leaf
+            object.__setattr__(self, 'key', self.left.max)
+            object.__setattr__(self, 'min', self.left.min)
+            object.__setattr__(self, 'max', self.right.max)
 
-    @property
-    @abstractmethod
-    def key(self):
-        pass
-
-    @property
-    @abstractmethod
-    def min(self):
-        pass
-
-    @property
-    @abstractmethod
-    def max(self):
-        pass
-
-    @property
-    @abstractmethod
-    def data(self):
-        pass
+    def __repr__(self):
+        if self.is_leaf:
+            return f"Leaf({self.key})"
+        else:
+            return f"Node({self.left}, {self.right})"
 
     @classmethod
-    def create(cls, points):
-        # make sure points are sorted by the x coordinate
+    def create_leaf(cls, key, value=None) -> TreeNode[K]:
+        return cls(_key=key, value=value)
 
-        if len(points) == 1: 
-            return LeafTreeLeaf(points[0])
-            
-        elif len(points) == 2:
-            left_leaf = LeafTreeLeaf(points[0])
-            right_leaf = LeafTreeLeaf(points[1])
-            return LeafTreeBranch(left_leaf, right_leaf)
+    @classmethod
+    def create_internal(cls, left: TreeNode, right: TreeNode, value=None) -> TreeNode[K]:
+        return cls(is_leaf=False, left=left, right=right, value=value, size=left.size + right.size)
 
-        left = construct_1D_tree(points[:len(points)//2])
-        right = construct_1D_tree(points[len(points)//2:])
-        
-        return LeafTreeBranch(left, right)
-
-            
-    def range_query(self, start, end):
-        # First phase, traverse until PRED(start)/SUCC(end) diverge
-        if self.key < start:
-            
-
-
-class LeafTreeBranch(LeafTree):
-    def __init__(self, left, right, data=None):
-        self.size = left.size + right.size
-        self.key = left.max
-        self.min = left.min
-        self.max = right.max
-        self.left = left
-        self.right = right
-        self.is_internal = True
-        self.data = data
-
-    def __repr__(self):
-        return f"Branch({self.left}, {self.right})"
-
-class LeafTreeLeaf(LeafTree):
-    is_internal = False
-    
-    def __init__(self, key, data=None):
-        self.size = 1
-        self.key = key
-        self.min = key
-        self.max = key
-        self.data = data
-
-    def __repr__(self):
-        return f"Leaf({self.key})"
-
-"""
-class StaticVanillaRangeTree:
-    def __init__(self, points: List[Point]):
-        
-        assert len(points) > 0
-        tree_1D = LeafTree(points)
-        for 
-        
-    def print_tree(self, root):
-        for node in traverse(root):
-            print('key:', node.key)
-            print('val:', node.value)
-        print("-------------------")
-    
-    def construct_tree(self, points):
-        assert len(points) > 0
-        
-        dim = len(points[0])
-        
-        if dim == 1:
-            pass
+    @classmethod
+    def create_from_sorted_list(cls, keys: Sequence[K], values: Optional[Sequence[V]] = None) -> TreeNode[K]:
+        assert keys
+        if values is not None:
+            assert len(values) == len(keys)
         else:
-            tree = AVL()
-            for point in points:
-                x, rest = point[0], point[1:]
-                tree.insert(x, {'coord': point})
-            augment_nodes(tree._root)
+            values = [None] * len(keys)
+        nodes: List[TreeNode[K]] = [cls.create_leaf(k, v) for k, v in zip(keys, values)]
+        while len(nodes) > 1:
+            new_nodes = [TreeNode.create_internal(nodes[i], nodes[i + 1]) for i in range(0, len(nodes) - 1, 2)]
+            if len(nodes) % 2 != 0:
+                new_nodes.append(nodes[-1])
+            nodes = new_nodes
+        return nodes[0]
 
-            self.print_tree(tree._root)
+    def search(self, key: K, *, path: Optional[List] = None) -> Optional[TreeNode[K]]:
+        if path is not None:
+            path.append(self)
 
-            for node in traverse(tree._root):
-                subtree_nodes = [coord[1:] for coord in node.value['subtree_nodes']]
-                recursive_range_tree = StaticVanillaRangeTree(subtree_nodes)
-                node.value['sub_range_tree'] = recursive_range_tree
-                self.print_tree(recursive_range_tree.tree._root)
-            return tree
-"""
+        if self.is_leaf:
+            if self.key == key:
+                return self
+            else:
+                return None
+
+        if key <= self.key:
+            return self.left.search(key, path=path)
+        else:
+            return self.right.search(key, path=path)
+
+    def pred(self, key: K, *, path: Optional[List] = None) -> Optional[TreeNode[K]]:
+        if path is not None:
+            path.append(self)
+        if self.is_leaf:
+            if key > self.key:
+                return self
+            else:
+                return None
+
+        if key > self.right.max:
+            return self.right.max_node(path=path)
+        if key > self.right.min:
+            assert not self.right.is_leaf  # cannot be leaf, as self.right.min != self.right.max
+            return self.right.pred(key, path=path)
+        if key > self.left.max:
+            return self.left.max_node(path=path)
+        else:
+            return self.left.pred(key, path=path)
+
+    def succ(self, key: K, *, path: Optional[List] = None) -> Optional[TreeNode[K]]:
+        if path is not None:
+            path.append(self)
+        if self.is_leaf:
+            if key < self.key:
+                return self
+            else:
+                return None
+        if key < self.left.min:
+            return self.left.min_node(path=path)
+        if key < self.left.max:
+            assert not self.left.is_leaf
+            return self.left.succ(key, path=path)
+        if key < self.right.min:
+            return self.right.min_node(path=path)
+        else:
+            return self.right.succ(key, path=path)
+
+    def max_node(self, *, path: Optional[List] = None) -> TreeNode[K]:
+        if path is not None:
+            path.append(self)
+
+        if self.is_leaf:
+            return self
+        return self.right.max_node(path=path)
+
+    def min_node(self, *, path: Optional[List] = None) -> TreeNode[K]:
+        if path is not None:
+            path.append(self)
+
+        if self.is_leaf:
+            return self
+        return self.left.min_node(path=path)
+
+    def range_query(self, start: K, end: K) -> Sequence[TreeNode[K, V]]:
+        pred_path = []
+        succ_path = []
+        pred_result = self.pred(start, path=pred_path)
+        succ_result = self.succ(end, path=succ_path)
+        if pred_result is None and succ_result is None:
+            return [self]  # The entire tree is within the range; this handles the one element case as well
+        split_idx = None  # Last index where pred_path is equal to succ_path
+        for split_idx, (pred_node, succ_node) in enumerate(zip(pred_path[1:], succ_path[1:]), start=0):
+            if pred_node is not succ_node:
+                break
+        pred_top_trees = []
+        if pred_path[-1].key >= start:
+            pred_top_trees.append(pred_path[-1])
+        for i in range(len(pred_path) - 1, split_idx):
+            if pred_path[i - 1].left is pred_path[i]:
+                pred_top_trees.append(pred_path[i].right)
+        succ_top_trees = []
+        for i in range(split_idx, len(succ_path) - 1):
+            if succ_path[i].right is succ_path[i + 1]:
+                succ_top_trees.append(succ_path[i].left)
+        return pred_top_trees + succ_top_trees
+
+    def traverse(self) -> Iterator[TreeNode[K, V]]:
+        if self.is_leaf:
+            yield self
+        else:
+            yield from self.left.traverse()
+            yield from self.right.traverse()
+
+
