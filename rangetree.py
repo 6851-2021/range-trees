@@ -74,6 +74,7 @@ class TreeNode(Generic[K, V]):
         else:
             return self.right.search(key, path=path)
 
+    # TODO: pred/succ seems like it has too many cases; can it be simplified?
     def pred(self, key: K, *, path: Optional[List] = None) -> Optional[TreeNode[K]]:
         if path is not None:
             path.append(self)
@@ -127,34 +128,40 @@ class TreeNode(Generic[K, V]):
             return self
         return self.left.min_node(path=path)
 
-    def range_query(self, start: K, end: K) -> Sequence[TreeNode[K, V]]:
+    # TODO: similar to pred/succ; can some of the special cases be removed?
+    def range_query(self, start: K, end: K) -> Iterator[TreeNode[K, V]]:
         pred_path = []
         succ_path = []
         pred_result = self.pred(start, path=pred_path)
         succ_result = self.succ(end, path=succ_path)
         if pred_result is None and succ_result is None:
-            return [self]  # The entire tree is within the range; this handles the one element case as well
-        split_idx = None  # Last index where pred_path is equal to succ_path
-        for split_idx, (pred_node, succ_node) in enumerate(zip(pred_path[1:], succ_path[1:]), start=0):
+            yield self  # The entire tree is within the range; this handles the one element case as well
+            return
+        split_idx = None  # First index where pred_path is different from succ_path
+        for i, (pred_node, succ_node) in enumerate(zip(pred_path, succ_path)):
             if pred_node is not succ_node:
+                split_idx = i
                 break
-        pred_top_trees = []
-        if pred_path[-1].key >= start:
-            pred_top_trees.append(pred_path[-1])
-        for i in range(len(pred_path) - 1, split_idx):
-            if pred_path[i - 1].left is pred_path[i]:
-                pred_top_trees.append(pred_path[i].right)
-        succ_top_trees = []
+        if split_idx is None:
+            return
+        if pred_result is None:
+            assert pred_path[-1].key >= start
+            yield pred_path[-1]
+        for i in reversed(range(split_idx, len(pred_path) - 1)):
+            if pred_path[i].left is pred_path[i + 1]:
+                yield pred_path[i].right
         for i in range(split_idx, len(succ_path) - 1):
             if succ_path[i].right is succ_path[i + 1]:
-                succ_top_trees.append(succ_path[i].left)
-        return pred_top_trees + succ_top_trees
+                yield succ_path[i].left
+        if succ_result is None:
+            assert succ_path[-1].key <= end
+            yield succ_path[-1]
 
-    def traverse(self) -> Iterator[TreeNode[K, V]]:
+    def traverse_leaves(self) -> Iterator[TreeNode[K, V]]:
         if self.is_leaf:
             yield self
         else:
-            yield from self.left.traverse()
-            yield from self.right.traverse()
+            yield from self.left.traverse_leaves()
+            yield from self.right.traverse_leaves()
 
 
