@@ -163,5 +163,3 @@ class TreeNode(Generic[K, V]):
         else:
             yield from self.left.traverse_leaves()
             yield from self.right.traverse_leaves()
-
-
