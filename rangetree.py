@@ -1,7 +1,33 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, InitVar, field
+from functools import total_ordering
 from typing import Optional, Generic, TypeVar, Any, List, Tuple, Sequence, Iterator
+
+
+@total_ordering
+class PointIndex:
+    def __init__(self, point, index=0):
+        assert 0 <= index < len(point)
+        self.point = point
+        self.index = index
+
+    def __getitem__(self, item):
+        if type(item) is not int:
+            raise TypeError(f"point indices must be integers, not {type(item)}")
+        if not (0 <= item < len(self.point)):
+            raise IndexError("point index out of range")
+
+    def __eq__(self, other):
+        if type(other) is type(self):
+            return self.point[self.index] == other.point[other.index]
+        return self.point[self.index] == other
+
+    def __lt__(self, other):
+        if type(other) is type(self):
+            return self.point[self.index] < other.point[other.index]
+        return self.point[self.index] < other
+
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -58,6 +84,18 @@ class TreeNode(Generic[K, V]):
                 new_nodes.append(nodes[-1])
             nodes = new_nodes
         return nodes[0]
+
+    @classmethod
+    def create_from_points(cls, points: Sequence[Tuple[K, ...]], index: int = 0):
+        assert points
+        assert len(points[0])
+        indexed_points = sorted(PointIndex(point=p, index=index) for p in points)
+        root = cls.create_from_sorted_list(indexed_points)
+        if index + 1 < len(points[0]):
+            for node in root.traverse_all():
+                new_keys = [leaf.key.point for leaf in node.traverse_leaves()]
+                object.__setattr__(node, 'value', cls.create_from_points(new_keys, index=index+1))
+        return root
 
     def search(self, key: K, *, path: Optional[List] = None) -> Optional[TreeNode[K]]:
         if path is not None:
@@ -157,9 +195,28 @@ class TreeNode(Generic[K, V]):
             assert succ_path[-1].key <= end
             yield succ_path[-1]
 
+    def range_point_query(self, start_point, end_point):
+        assert len(start_point) == len(end_point)
+        start_first, *start_point = start_point
+        end_first, *end_point = end_point
+        query_result = self.range_query(start_first, end_first)
+        for node in query_result:
+            if not start_point:
+                yield from (leaf.key.point for leaf in node.traverse_leaves())
+            else:
+                yield from node.value.range_point_query(start_point, end_point)
+
     def traverse_leaves(self) -> Iterator[TreeNode[K, V]]:
         if self.is_leaf:
             yield self
         else:
             yield from self.left.traverse_leaves()
+            yield from self.right.traverse_leaves()
+
+    def traverse_all(self) -> Iterator[TreeNode[K, V]]:
+        if self.is_leaf:
+            yield self
+        else:
+            yield from self.left.traverse_leaves()
+            yield self
             yield from self.right.traverse_leaves()
